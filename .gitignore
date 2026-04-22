@@ -1,0 +1,5 @@
+.env
+local.settings.json
+labenv
+.venv
+.vscode
