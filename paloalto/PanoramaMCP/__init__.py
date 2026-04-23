@@ -99,7 +99,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                 },
                 {
                     'name': 'get_security_policies',
-                    'description': 'Retrieve security policies',
+                    'description': 'Retrieve security policies with optional IP, service/port, and zone filtering',
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
@@ -107,7 +107,11 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                             'vsys': {'type': 'string'},
                             'name': {'type': 'string'},
                             'src_zone': {'type': 'string'},
-                            'dst_zone': {'type': 'string'}
+                            'dst_zone': {'type': 'string'},
+                            'src_ip': {'type': 'string'},
+                            'dst_ip': {'type': 'string'},
+                            'service_port': {'type': 'string'},
+                            'virtual_router': {'type': 'string'}
                         }
                     }
                 },

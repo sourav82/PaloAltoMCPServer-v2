@@ -128,4 +128,4 @@ class PanoramaClient:
 
         logger.info(f"Retrieving Panorama config for xpath: {xpath}")
         data = self._request(params)
-        return data.get("response", {}).get("result", {})
+        return data.get("response", {}).get("result") or {}
