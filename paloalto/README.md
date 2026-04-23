@@ -1,6 +1,6 @@
 # Palo Alto Panorama MCP Server
 
-A Model Context Protocol (MCP) server for querying Palo Alto Panorama firewall logs, providing AI agents with access to threat, traffic, and URL filtering logs.
+A Model Context Protocol (MCP) server for querying Palo Alto firewall and Panorama data, providing AI agents with access to threat, traffic, URL, and policy information.
 
 ## Features
 
@@ -8,6 +8,7 @@ A Model Context Protocol (MCP) server for querying Palo Alto Panorama firewall l
 - **Traffic Log Analysis**: Search traffic logs with filtering by IPs, ports, actions, and rules
 - **URL Filtering Logs**: Analyze URL access patterns and filtering decisions
 - **Azure Integration**: Secure credential management via Azure Key Vault
+- **Policy Queries**: Query security and NAT policies, routes, and zone inference
 - **JSON Output**: Structured log data optimized for AI agent consumption
 
 ## Local Development
@@ -29,6 +30,10 @@ A Model Context Protocol (MCP) server for querying Palo Alto Panorama firewall l
    ```env
    PANORAMA_URL=https://your-panorama-url
    KEYVAULT_URL=https://your-keyvault.vault.azure.net/
+   ```
+
+   Optional for local development with a service principal:
+   ```env
    TENANT_ID=your-tenant-id
    CLIENT_ID=your-client-id
    CLIENT_SECRET=your-client-secret
@@ -113,7 +118,189 @@ curl -X POST http://localhost:8000/mcp \\
    python test_transports.py
    ```
 
+## Azure Container Apps Deployment
+
+Azure Container Apps is the recommended hosting option for this project because it runs the MCP HTTP server as a normal long-lived web application.
+
+### Resources to Create
+
+For a low-cost PoC, create only these Azure resources:
+
+1. Resource group
+2. Azure Container Registry
+3. Log Analytics workspace
+4. Azure Container Apps Environment
+5. Azure Container App
+
+Existing resources you can reuse:
+
+- Key Vault: `https://kv-secret-001.vault.azure.net/`
+
+Not needed for this PoC:
+
+- New Key Vault
+- VNet/private networking
+- Azure Functions
+
+### Required Environment Variables
+
+Set these in the Container App:
+
+```env
+PANORAMA_URL=https://your-firewall-or-panorama-url
+KEYVAULT_URL=https://kv-secret-001.vault.azure.net/
+MCP_TRANSPORT=http
+PORT=8000
+HOST=0.0.0.0
+```
+
+For Azure Container Apps with managed identity, `TENANT_ID`, `CLIENT_ID`, and `CLIENT_SECRET` are not required for Key Vault access.
+
+### Step-by-Step Provisioning
+
+Replace the sample names before running these commands.
+
+```bash
+# Variables
+RG=paloalto-mcp-rg
+LOCATION=centralindia
+ACR_NAME=paloaltomcpacr001
+LAW_NAME=paloalto-mcp-logs
+ENV_NAME=paloalto-mcp-env
+APP_NAME=paloalto-mcp
+IMAGE_NAME=paloalto-mcp
+IMAGE_TAG=v1
+KEYVAULT_URL=https://kv-secret-001.vault.azure.net/
+
+# 1. Login and set subscription
+az login
+az account set --subscription "<subscription-id>"
+
+# 2. Create resource group
+az group create --name $RG --location $LOCATION
+
+# 3. Create Azure Container Registry
+az acr create --name $ACR_NAME --resource-group $RG --sku Basic
+
+# 4. Create Log Analytics workspace
+az monitor log-analytics workspace create --resource-group $RG --workspace-name $LAW_NAME --location $LOCATION
+
+# 5. Create Container Apps environment
+az containerapp env create \
+  --name $ENV_NAME \
+  --resource-group $RG \
+  --location $LOCATION \
+  --logs-workspace-id $(az monitor log-analytics workspace show --resource-group $RG --workspace-name $LAW_NAME --query customerId -o tsv) \
+  --logs-workspace-key $(az monitor log-analytics workspace get-shared-keys --resource-group $RG --workspace-name $LAW_NAME --query primarySharedKey -o tsv)
+
+# 6. Build and push the image
+az acr build \
+  --registry $ACR_NAME \
+  --image $IMAGE_NAME:$IMAGE_TAG \
+  .
+
+# 7. Create the Container App
+az containerapp create \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --environment $ENV_NAME \
+  --image $ACR_NAME.azurecr.io/$IMAGE_NAME:$IMAGE_TAG \
+  --target-port 8000 \
+  --ingress external \
+  --registry-server $ACR_NAME.azurecr.io \
+  --cpu 0.5 \
+  --memory 1.0Gi \
+  --min-replicas 1 \
+  --max-replicas 1 \
+  --env-vars \
+    MCP_TRANSPORT=http \
+    HOST=0.0.0.0 \
+    PORT=8000 \
+    PANORAMA_URL="https://your-firewall-or-panorama-url" \
+    KEYVAULT_URL="$KEYVAULT_URL"
+```
+
+# 8. Enable system-assigned managed identity on the Container App
+az containerapp identity assign \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --system-assigned
+
+# 9. Get the managed identity principal ID
+PRINCIPAL_ID=$(az containerapp identity show \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --query principalId -o tsv)
+
+# 10. Grant the app access to Key Vault secrets
+az role assignment create \
+  --assignee-object-id $PRINCIPAL_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "Key Vault Secrets User" \
+  --scope $(az keyvault show --name kv-secret-001 --query id -o tsv)
+```
+
+If you want Container Apps to hold app-level secrets as Key Vault references, you can also add them after creation:
+
+```bash
+az containerapp secret set \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --secrets \
+    pano-user=keyvaultref:https://kv-secret-001.vault.azure.net/secrets/panorama-username,identityref:system \
+    pano-pass=keyvaultref:https://kv-secret-001.vault.azure.net/secrets/panorama-password,identityref:system
+```
+
+In the current codebase, this extra step is optional because the application already reads `panorama-username` and `panorama-password` directly from Key Vault.
+
+### Test the Container App
+
+Get the application URL:
+
+```bash
+az containerapp show \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --query properties.configuration.ingress.fqdn \
+  -o tsv
+```
+
+Health check:
+
+```bash
+curl https://<container-app-fqdn>/health
+```
+
+MCP tools list:
+
+```bash
+curl -X POST https://<container-app-fqdn>/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }'
+```
+
+### Client Impact
+
+From the client perspective, only the server URL changes.
+
+Before:
+
+- Azure Functions endpoint such as `https://<function-app>.azurewebsites.net/api/PanoramaMCP`
+
+After:
+
+- Container App MCP endpoint such as `https://<container-app-fqdn>/mcp`
+
+The protocol remains JSON-RPC over HTTP, and the tool names and arguments stay the same.
+
 ## Azure Functions Deployment
+
+Azure Functions support is still present in the repo, but Container Apps is now the preferred deployment path for MCP HTTP hosting.
 
 ### Quick Deploy
 

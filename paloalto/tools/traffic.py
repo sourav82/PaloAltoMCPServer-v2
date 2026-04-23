@@ -1,5 +1,4 @@
-from app.context import MCPContext
-from services.session_store import update_session
+from app.context import build_context
 from app.panorama_client import PanoramaClient
 from app.parser import parse_traffic_logs
 from services.session_store import update_session
@@ -10,12 +9,13 @@ client = PanoramaClient()
 
 @mcp.tool()
 def search_traffic_logs(
-    context: MCPContext,
+    session_id: str = None,
     src_ip: str = None,
     dst_ip: str = None,
     port: int = None,
     action: str = None
 ):
+    context = build_context(session_id)
     filters = []
 
     if src_ip:

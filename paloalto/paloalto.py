@@ -8,7 +8,8 @@ import os
 import sys
 import logging
 from starlette.responses import JSONResponse
-from tools import mcp, threat, traffic, url
+from mcp.server.transport_security import TransportSecuritySettings
+from tools import mcp, threat, traffic, url, policies
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -30,8 +31,14 @@ def run_http():
 
     logger.info("Starting MCP server with HTTP transport")
 
-    # Configure for stateful sessions (required for session persistence)
-    mcp.settings.stateless_http = False
+    # Use stateless HTTP so standard MCP JSON-RPC calls work without
+    # session negotiation headers in simple clients and PoC testing.
+    mcp.settings.stateless_http = True
+    # Container Apps uses an external hostname, so disable the localhost-only
+    # default host restriction for PoC HTTP deployments.
+    mcp.settings.transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=False
+    )
 
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', '8000'))

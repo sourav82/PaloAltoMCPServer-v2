@@ -1,5 +1,4 @@
-from app.context import MCPContext
-from services.session_store import update_session
+from app.context import build_context
 from app.panorama_client import PanoramaClient
 from app.parser import parse_url_logs
 from services.session_store import update_session
@@ -10,13 +9,14 @@ client = PanoramaClient()
 
 @mcp.tool()
 def search_url_logs(
-    context: MCPContext,
+    session_id: str = None,
     src_ip: str = None,
     dst_ip: str = None,
     url: str = None,
     category: str = None,
     action: str = None
 ):
+    context = build_context(session_id)
     filters = []
 
     if src_ip:

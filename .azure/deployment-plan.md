@@ -1,7 +1,7 @@
 # Deployment Plan
 
 ## Status
-Awaiting Approval
+Ready for Validation
 
 ## Goal
 Prepare the Palo Alto MCP server for deployment to Azure Container Apps as a long-running HTTP MCP service.
@@ -17,8 +17,8 @@ Prepare the Palo Alto MCP server for deployment to Azure Container Apps as a lon
 - One Azure Container Apps Environment to host the app
 - One Azure Container App for the MCP server
 - One Log Analytics workspace for environment logs
-- Optional Key Vault for firewall credentials and other secrets
-- Optional VNet integration if the firewall is reachable only through private networking
+- Reuse existing Key Vault: `https://kv-secret-001.vault.azure.net`
+- No VNet integration required for this PoC because the firewall is reachable over public IP
 
 ## Azure Resources
 - Resource group
@@ -26,9 +26,9 @@ Prepare the Palo Alto MCP server for deployment to Azure Container Apps as a lon
 - Log Analytics workspace
 - Azure Container Apps Environment
 - Azure Container App
-- Optional Key Vault
-- Optional user-assigned or system-assigned managed identity
-- Optional virtual network and subnet for private connectivity
+- Existing Key Vault only, no new Key Vault
+- Prefer system-assigned managed identity only if needed for Key Vault access
+- No VNet or private networking resources for the PoC
 
 ## Planned Code Changes
 - Make the HTTP MCP entrypoint the primary container startup path
@@ -37,6 +37,13 @@ Prepare the Palo Alto MCP server for deployment to Azure Container Apps as a lon
 - Add a `.dockerignore`
 - Add Container Apps deployment guidance and required environment variables
 - Keep Azure Functions files in place unless explicitly removed later
+
+## Completed Changes
+- Imported `policies` into the HTTP MCP entrypoint so the tool is available in Container Apps
+- Added a root `Dockerfile` for Azure Container Apps deployment
+- Added a root `.dockerignore`
+- Lowered package metadata requirement to Python 3.11 for a practical container runtime target
+- Added step-by-step Azure Container Apps provisioning and testing guidance to `paloalto/README.md`
 
 ## Client Impact
 - Client continues calling MCP over HTTP/JSON-RPC
@@ -50,3 +57,10 @@ Prepare the Palo Alto MCP server for deployment to Azure Container Apps as a lon
 - Python compile check succeeds
 - HTTP health endpoint is reachable in container mode
 - MCP server starts with `MCP_TRANSPORT=http`
+
+## Cost Notes
+- Optimize for PoC cost, not high availability
+- Use a single Container App replica with low CPU and memory
+- Use the smallest practical Azure Container Registry SKU
+- Use one Container Apps Environment and one Log Analytics workspace only
+- Avoid extra networking resources since public connectivity is acceptable

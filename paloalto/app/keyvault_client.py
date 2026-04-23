@@ -1,7 +1,7 @@
 
-from azure.identity import ClientSecretCredential
+from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from app.config import KEYVAULT_URL, TENANT_ID, CLIENT_ID, CLIENT_SECRET
+from app.config import KEYVAULT_URL
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,11 +15,8 @@ def _get_client():
     if _client is None:
         logger.info(f"Initializing Key Vault client for: {KEYVAULT_URL}")
         try:
-            credential = ClientSecretCredential(
-                tenant_id=TENANT_ID,
-                client_id=CLIENT_ID,
-                client_secret=CLIENT_SECRET
-            )
+            # Uses managed identity in Azure and environment/Azure CLI credentials locally.
+            credential = DefaultAzureCredential()
             _client = SecretClient(vault_url=KEYVAULT_URL, credential=credential)
         except Exception as e:
             logger.error(f"Failed to initialize Key Vault client: {e}")

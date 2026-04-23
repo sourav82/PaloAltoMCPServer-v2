@@ -5,32 +5,21 @@ import logging
 import json
 import uuid
 import azure.functions as func
-from app.context import MCPContext
 from tools import threat, traffic, url, policies
 
 # Set up logging for Azure Functions
 logging.basicConfig(level=logging.INFO)
 
 
-def _build_session_context(req: func.HttpRequest) -> MCPContext:
-    session_id = (
-        req.headers.get('x-session-id')
-        or req.params.get('session_id')
-        or str(uuid.uuid4())
-    )
-    metadata = {
-        'client_ip': req.headers.get('X-Forwarded-For') or req.headers.get('X-ARR-ClientIP'),
-        'user_agent': req.headers.get('User-Agent'),
-        'request_id': req.headers.get('x-ms-client-request-id')
-    }
-    return MCPContext(session_id=session_id, metadata=metadata)
-
-
 async def main(req: func.HttpRequest) -> func.HttpResponse:
     """Azure Functions HTTP trigger for MCP server"""
 
     try:
-        context = _build_session_context(req)
+        request_session_id = (
+            req.headers.get('x-session-id')
+            or req.params.get('session_id')
+            or str(uuid.uuid4())
+        )
 
         # Get request body
         req_body = req.get_json()
@@ -50,7 +39,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
-                            'context': {'type': 'object'},
+                            'session_id': {'type': 'string'},
                             'src_ip': {'type': 'string'},
                             'dst_ip': {'type': 'string'},
                             'threat_id': {'type': 'string'},
@@ -64,7 +53,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
-                            'context': {'type': 'object'},
+                            'session_id': {'type': 'string'},
                             'src_ip': {'type': 'string'},
                             'dst_ip': {'type': 'string'}
                         }
@@ -76,7 +65,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
-                            'context': {'type': 'object'},
+                            'session_id': {'type': 'string'},
                             'src_ip': {'type': 'string'},
                             'dst_ip': {'type': 'string'},
                             'url': {'type': 'string'},
@@ -91,7 +80,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
-                            'context': {'type': 'object'},
+                            'session_id': {'type': 'string'},
                             'vsys': {'type': 'string'},
                             'name': {'type': 'string'}
                         }
@@ -103,7 +92,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
-                            'context': {'type': 'object'},
+                            'session_id': {'type': 'string'},
                             'vsys': {'type': 'string'},
                             'name': {'type': 'string'},
                             'src_zone': {'type': 'string'},
@@ -121,7 +110,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
                     'inputSchema': {
                         'type': 'object',
                         'properties': {
-                            'context': {'type': 'object'},
+                            'session_id': {'type': 'string'},
                             'vsys': {'type': 'string'},
                             'virtual_router': {'type': 'string'},
                             'name': {'type': 'string'}
@@ -143,20 +132,21 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
             tool_name = params.get('name')
             tool_args = params.get('arguments', {})
             tool_args.pop('context', None)
+            tool_args.setdefault('session_id', request_session_id)
 
             result = None
             if tool_name == 'search_threat_logs':
-                result = threat.search_threat_logs(context, **tool_args)
+                result = threat.search_threat_logs(**tool_args)
             elif tool_name == 'search_traffic_logs':
-                result = traffic.search_traffic_logs(context, **tool_args)
+                result = traffic.search_traffic_logs(**tool_args)
             elif tool_name == 'search_url_logs':
-                result = url.search_url_logs(context, **tool_args)
+                result = url.search_url_logs(**tool_args)
             elif tool_name == 'get_nat_policies':
-                result = policies.get_nat_policies(context, **tool_args)
+                result = policies.get_nat_policies(**tool_args)
             elif tool_name == 'get_security_policies':
-                result = policies.get_security_policies(context, **tool_args)
+                result = policies.get_security_policies(**tool_args)
             elif tool_name == 'get_virtual_network_routes':
-                result = policies.get_virtual_network_routes(context, **tool_args)
+                result = policies.get_virtual_network_routes(**tool_args)
             else:
                 raise ValueError(f"Unknown tool: {tool_name}")
 

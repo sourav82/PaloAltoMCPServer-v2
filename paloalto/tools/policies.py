@@ -1,6 +1,6 @@
 import ipaddress
 
-from app.context import MCPContext
+from app.context import MCPContext, build_context
 from services.session_store import update_session
 from app.panorama_client import PanoramaClient
 from tools import mcp
@@ -584,10 +584,11 @@ def _resolve_referenced_objects(policy_entries: list[dict], vsys: str):
 
 @mcp.tool()
 def get_nat_policies(
-    context: MCPContext,
+    session_id: str = None,
     vsys: str = "vsys1",
     name: str = None
 ):
+    context = build_context(session_id)
     xpath = f"/config/devices/entry/vsys/entry[@name='{vsys}']/rulebase/nat/rules"
     data = client.get_config(xpath)
 
@@ -603,7 +604,7 @@ def get_nat_policies(
 
 @mcp.tool()
 def get_security_policies(
-    context: MCPContext,
+    session_id: str = None,
     vsys: str = "vsys1",
     name: str = None,
     src_zone: str = None,
@@ -613,6 +614,7 @@ def get_security_policies(
     service_port: str = None,
     virtual_router: str = None
 ):
+    context = build_context(session_id)
     xpath = f"/config/devices/entry/vsys/entry[@name='{vsys}']/rulebase/security/rules/entry"
     data = client.get_config(xpath)
 
@@ -681,11 +683,12 @@ def get_security_policies(
 
 @mcp.tool()
 def get_virtual_network_routes(
-    context: MCPContext,
+    session_id: str = None,
     vsys: str = "vsys1",
     virtual_router: str = None,
     name: str = None
 ):
+    context = build_context(session_id)
     routes = _get_static_routes(vsys, virtual_router)
 
     if name:
